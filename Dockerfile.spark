@@ -1,0 +1,17 @@
+FROM bitnami/spark:latest
+
+# # Install Python dependencies
+# RUN pip install numpy pandas scikit-learn pyspark
+
+# # Set working directory
+WORKDIR /opt/spark-apps
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY weather_spark_processor.py .
+
+# CMD ["python", "weather_spark_processor.py"]
+# CMD ["spark-submit", "--master", "local[*]", "weather_spark_processor.py"]
+
+
+# The command will be specified in docker-compose.yml

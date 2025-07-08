@@ -1,0 +1,194 @@
+version: '3.8'
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    container_name: imarika-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+    - 2181:2181
+    networks:
+    - confluent
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - echo srvr | nc localhost 2181 || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  kafka-broker-1:
+    image: confluentinc/cp-kafka:latest
+    container_name: imarika-kafka-broker
+    hostname: kafka-broker-1
+    ports:
+    - 9092:9092
+    - 19092:19092
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: imarika-zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://imarika-kafka-broker:9092,PLAINTEXT_INTERNAL://kafka-broker-1:19092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_INTERNAL://0.0.0.0:19092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    networks:
+    - confluent
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - kafka-topics --bootstrap-server localhost:9092 --list || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+  schema-registry:
+    image: confluentinc/cp-schema-registry:latest
+    container_name: imarika-schema-registry
+    hostname: schema-registry
+    depends_on:
+      kafka-broker-1:
+        condition: service_healthy
+    ports:
+    - 8081:8081
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_LISTENERS: http://schema-registry:8081
+      SCHEMA_REGISTRY_KAFKASTORE_CONNECTION_URL: imarika-zookeeper:2181
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://kafka-broker-1:19092
+      SCHEMA_REGISTRY_DEBUG: 'true'
+    networks:
+    - confluent
+  kafdrop:
+    image: obsidiandynamics/kafdrop
+    container_name: imarika-kafdrop
+    ports:
+    - 9000:9000
+    depends_on:
+      kafka-broker-1:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKERCONNECT: kafka-broker-1:19092
+      JVM_OPTS: -Xms32M -Xmx64M
+    networks:
+    - confluent
+  spark-master:
+    image: bitnami/spark:latest
+    container_name: imarika-spark-master
+    command: bin/spark-class org.apache.spark.deploy.master.Master
+    ports:
+    - 8080:8080
+    - 7077:7077
+    networks:
+    - confluent
+  spark-worker:
+    image: bitnami/spark:latest
+    container_name: imarika-spark-worker
+    command: bin/spark-class org.apache.spark.deploy.worker.Worker spark://imarika-spark-master:7077
+    depends_on:
+    - spark-master
+    environment:
+      SPARK_WORKER_CORES: 2
+      SPARK_WORKER_MEMORY: 1g
+      SPARK_MASTER_URL: spark://imarika-spark-master:7077
+    networks:
+    - confluent
+  postgres:
+    image: postgres:14
+    container_name: imarika-postgres
+    ports:
+    - 5433:5432
+    environment:
+      # POSTGRES_USER: postgres
+      # POSTGRES_PASSWORD: postgres
+      # POSTGRES_DB: imarika
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+    - postgres-data:/var/lib/postgresql/data
+    - ./postgres-init:/docker-entrypoint-initdb.d
+    networks:
+    - confluent
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -U ${POSTGRES_USER}
+      # - pg_isready -U postgres
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  spark-submit:
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
+    container_name: imarika-spark-submit-${UNIQUE_ID}
+    depends_on:
+      kafka-broker-1:
+        condition: service_healthy
+      spark-master:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    volumes:
+    - ${PWD}:/opt/spark-apps
+    command:
+      - /opt/bitnami/spark/bin/spark-submit
+      - --master
+      - spark://imarika-spark-master:7077
+      - --packages
+      - org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.0,org.postgresql:postgresql:42.5.1
+      - --conf
+      - spark.jars.ivy=/tmp/.ivy
+      - /opt/spark-apps/weather_spark_processor.py
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka-broker-1:19092
+      KAFKA_TOPIC_RAW: weather-readings-raw
+      POSTGRES_URL: jdbc:postgresql://imarika-postgres:5432/imarika
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      CHECKPOINT_LOCATION: /tmp/imarika/checkpoints
+      MAX_OFFSETS_PER_TRIGGER: 1000
+    networks:
+    - confluent
+
+  producer:
+    build:
+      context: .
+      dockerfile: Dockerfile.producer
+    container_name: api_data_producer
+    depends_on:
+    - kafka-broker-1
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka-broker-1:19092
+      EMAIL: derrick.lubanga@strathmore.edu
+      PASSWORD: Expendables
+    volumes:
+    - ./api_data_fetcher_kafka.py:/app/api_data_fetcher_kafka.py
+    - ./requirements.txt:/app/requirements.txt
+    networks:
+    - confluent
+  consumer:
+    build:
+      context: .
+      dockerfile: Dockerfile.consumer
+    container_name: kafka_consumer
+    depends_on:
+    - kafka-broker-1
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka-broker-1:19092
+    volumes:
+    - ./kafka_consumer.py:/app/kafka_consumer.py
+    - ./requirements.txt:/app/requirements.txt
+    networks:
+    - confluent
+volumes:
+  postgres-data:
+    name: imarika-postgres-data
+networks:
+  confluent:
+    name: imarika-confluent
+    driver: bridge
+
