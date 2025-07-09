@@ -18,7 +18,10 @@ from pyspark.sql.functions import col, from_json, to_json, struct, lit, current_
 from pyspark.sql.types import StructType, StructField, StringType, DoubleType, BooleanType, IntegerType, TimestampType
 from pyspark.ml.feature import Imputer, VectorAssembler, StandardScaler
 from pyspark.ml.clustering import KMeans
+from pyspark.sql.types import *
+
 import pyspark.sql.functions as F
+
 
 # Configure logging
 logging.basicConfig(
@@ -72,15 +75,23 @@ def define_raw_schema():
             StructField("wind_direction_sensor", IntegerType(), True)
         ]), True),
         # Add a catch-all field for future schema evolution
+        StructField("created_at", TimestampType(), True),
         StructField("additional_fields", StringType(), True)
+
     ])
 
+def define_outer_schema():
+    return StructType([
+        StructField("message", StringType()),
+        StructField("success", BooleanType()),
+        StructField("data", define_raw_schema())  # `define_raw_schema()` stays the same
+    ])
 
 def basic_data_cleaning(df):
     """Filter invalid readings and flatten nested JSON"""
     try:
         logger.info("Starting basic data cleaning")
-        df_valid = df.filter(col("reading.valid") == True)
+        df_valid = df.filter(col("reading.valid") == True).cache()
         valid_count = df_valid.count()
         logger.info(f"Valid readings: {valid_count} out of {df.count()}")
         
@@ -247,42 +258,95 @@ def aggregate_daily_data(df):
 
         )
         
-        # Condition and nested struct
-        df_cond = df_daily.withColumn(
-            "condition_text",
-            when(col("daily_will_it_rain")==1,"Rainy")
-            .when(col("avghumidity")>80,"Cloudy")
-            .when(col("maxtemp_c")>30,"Hot")
-            .when(col("maxtemp_c")<15,"Cold")
-            .otherwise("Sunny")
-        )
+        # # Condition and nested struct
+        # df_cond = df_daily.withColumn(
+        #     "condition_text",
+        #     when(col("daily_will_it_rain")==1,"Rainy")
+        #     .when(col("avghumidity")>80,"Cloudy")
+        #     .when(col("maxtemp_c")>30,"Hot")
+        #     .when(col("maxtemp_c")<15,"Cold")
+        #     .otherwise("Sunny")
+        # )
         
-        df_cond = df_cond.withColumn(
-            "day",
-            struct(
-                col("maxtemp_c"),col("mintemp_c"),col("avgtemp_c"),col("maxwind_kph"),
-                col("totalprecip_mm"),col("avghumidity"),col("daily_will_it_rain"),col("daily_chance_of_rain"),
-                struct(
-                    col("condition_text").alias("text"),
-                    lit("//cdn.weatherapi.com/weather/64x64/day/113.png").alias("icon"),
-                    lit(1000).alias("code")
-                ).alias("condition")
-            )
-        )
+        # df_cond = df_cond.withColumn(
+        #     "day",
+        #     struct(
+        #         col("maxtemp_c"),col("mintemp_c"),col("avgtemp_c"),col("maxwind_kph"),
+        #         col("totalprecip_mm"),col("avghumidity"),col("daily_will_it_rain"),col("daily_chance_of_rain"),
+        #         struct(
+        #             col("condition_text").alias("text"),
+        #             lit("//cdn.weatherapi.com/weather/64x64/day/113.png").alias("icon"),
+        #             lit(1000).alias("code")
+        #         ).alias("condition")
+        #     )
+        # )
         
-        # result_df = df_cond.select("device_id","date","date_epoch","day","is_anomaly","anomaly_score","processing_timestamp")
-        result_df = df_cond.select("device_id", "date", "date_epoch",to_json(col("day")).alias("day"),  
-                                   "is_anomaly", "anomaly_score", "processing_timestamp")
+        # # result_df = df_cond.select("device_id","date","date_epoch","day","is_anomaly","anomaly_score","processing_timestamp")
+        # result_df = df_cond.select("device_id", "date", "date_epoch",to_json(col("day")).alias("day"),  
+        #                            "is_anomaly", "anomaly_score", "processing_timestamp")
         # Log aggregation statistics
-        logger.info(f"Aggregated {df.count()} records into {result_df.count()} daily summaries")
+        # logger.info(f"Aggregated {df.count()} records into {result_df.count()} daily summaries")
         
-        return result_df
+        # return result_df
+        return df_daily
+
     except Exception as e:
         logger.error(f"Error in aggregate_daily_data: {str(e)}")
         logger.error(traceback.format_exc())
         raise
 
 
+# def validate_data_quality(df, table_name):
+#     """Validate data quality before writing to database"""
+#     try:
+#         logger.info(f"Validating data quality for {table_name}")
+        
+#         # Check if DataFrame is empty
+#         if df.isEmpty():
+#             logger.warning(f"DataFrame for {table_name} is empty")
+#             return False
+            
+#         # Check for nulls in critical columns
+#         if table_name == POSTGRES_TABLE_CLEAN:
+#             # null_counts = {col: df.filter(df[col].isNull()).count() for col in ["device_id", "date", "day"]}
+#             null_counts = {"device_id": df.filter(df["device_id"].isNull()).count(),
+#                            "date": df.filter(df["date"].isNull()).count(),
+#                            "day": df.filter(df["day"].isNull() | (df["day"] == "")).count()  # also check empty string
+#                            }
+#             logger.info(f"Null counts in critical columns: {null_counts}")
+            
+#             if any(count > 0 for count in null_counts.values()):
+#                 logger.warning(f"Critical columns contain NULL values: {null_counts}")
+#                 return False
+            
+#             # Check for anomalies in aggregated values
+#             stats = df.select(
+#                 F.min("day.mintemp_c").alias("min_temp"),
+#                 F.max("day.maxtemp_c").alias("max_temp"),
+#                 F.avg("day.avghumidity").alias("avg_humidity"),
+#                 F.max("anomaly_score").alias("anomaly_score"),
+#                 F.max(when(col("is_anomaly") == True, 1).otherwise(0)).cast("boolean").alias("is_anomaly")
+#             ).collect()[0]
+            
+#             logger.info(f"Data stats: min_temp={stats['min_temp']}, max_temp={stats['max_temp']}, avg_humidity={stats['avg_humidity']}")
+            
+#             # Return True if data passes quality checks
+#             quality_check = all([
+#                 stats['min_temp'] is not None,
+#                 stats['max_temp'] is not None,
+#                 stats['min_temp'] <= stats['max_temp'],
+#                 stats['avg_humidity'] is not None and 0 <= stats['avg_humidity'] <= 100
+#             ])
+            
+#             if not quality_check:
+#                 logger.warning("Data quality check failed for aggregated values")
+#                 return False
+                
+#         return True  # For raw table or if all checks pass
+#     except Exception as e:
+#         logger.error(f"Error in validate_data_quality: {str(e)}")
+#         logger.error(traceback.format_exc())
+#         return False
 def validate_data_quality(df, table_name):
     """Validate data quality before writing to database"""
     try:
@@ -295,24 +359,21 @@ def validate_data_quality(df, table_name):
             
         # Check for nulls in critical columns
         if table_name == POSTGRES_TABLE_CLEAN:
-            # null_counts = {col: df.filter(df[col].isNull()).count() for col in ["device_id", "date", "day"]}
-            null_counts = {"device_id": df.filter(df["device_id"].isNull()).count(),
-                           "date": df.filter(df["date"].isNull()).count(),
-                           "day": df.filter(df["day"].isNull() | (df["day"] == "")).count()  # also check empty string
-                           }
+            null_counts = {
+                "device_id": df.filter(df["device_id"].isNull()).count(),
+                "timestamp": df.filter(df["timestamp"].isNull()).count()
+            }
             logger.info(f"Null counts in critical columns: {null_counts}")
             
             if any(count > 0 for count in null_counts.values()):
                 logger.warning(f"Critical columns contain NULL values: {null_counts}")
                 return False
             
-            # Check for anomalies in aggregated values
+            # Check for reasonable temperature ranges
             stats = df.select(
-                F.min("day.mintemp_c").alias("min_temp"),
-                F.max("day.maxtemp_c").alias("max_temp"),
-                F.avg("day.avghumidity").alias("avg_humidity"),
-                F.max("anomaly_score").alias("anomaly_score"),
-                F.max(when(col("is_anomaly") == True, 1).otherwise(0)).cast("boolean").alias("is_anomaly")
+                F.min("min_temp").alias("min_temp"),
+                F.max("max_temp").alias("max_temp"),
+                F.avg("avg_humidity").alias("avg_humidity")
             ).collect()[0]
             
             logger.info(f"Data stats: min_temp={stats['min_temp']}, max_temp={stats['max_temp']}, avg_humidity={stats['avg_humidity']}")
@@ -329,15 +390,53 @@ def validate_data_quality(df, table_name):
                 logger.warning("Data quality check failed for aggregated values")
                 return False
                 
-        return True  # For raw table or if all checks pass
+        return True
     except Exception as e:
         logger.error(f"Error in validate_data_quality: {str(e)}")
         logger.error(traceback.format_exc())
         return False
 
-
+# def write_batch_to_postgres(batch_df, table, batch_id):
+#     """Write batch data to PostgreSQL with error handling"""
+#     try:
+#         logger.info(f"Writing batch {batch_id} to {table}")
+        
+#         # Check if DataFrame is empty
+#         if batch_df.isEmpty():
+#             logger.warning(f"Batch {batch_id} is empty, skipping write to {table}")
+#             return False
+            
+#         # Validate data quality
+#         if not validate_data_quality(batch_df, table):
+#             logger.warning(f"Data quality validation failed for batch {batch_id}, skipping write to {table}")
+#             return False
+            
+#         # Prepare data for raw table
+#         if table == POSTGRES_TABLE_RAW:
+#             batch_df = batch_df.withColumn("data", to_json(struct("*"))).select("data")
+        
+#         # Log schema for debugging
+#         logger.info(f"Schema for table {table}: {batch_df.schema.simpleString()}")
+        
+#         # Write to PostgreSQL
+#         (batch_df.write
+#              .format("jdbc")
+#              .option("url", POSTGRES_URL)
+#              .option("dbtable", table)
+#              .option("user", POSTGRES_USER)
+#              .option("password", POSTGRES_PASSWORD)
+#              .option("driver", POSTGRES_DRIVER)
+#              .mode("append")
+#              .save())
+        
+#         logger.info(f"Successfully wrote batch {batch_id} to {table}")
+#         return True
+#     except Exception as e:
+#         logger.error(f"Failed to write batch {batch_id} to {table}: {str(e)}")
+#         logger.error(traceback.format_exc())
+#         return False
 def write_batch_to_postgres(batch_df, table, batch_id):
-    """Write batch data to PostgreSQL with error handling"""
+    """Write batch data to PostgreSQL with enhanced error handling"""
     try:
         logger.info(f"Writing batch {batch_id} to {table}")
         
@@ -345,7 +444,15 @@ def write_batch_to_postgres(batch_df, table, batch_id):
         if batch_df.isEmpty():
             logger.warning(f"Batch {batch_id} is empty, skipping write to {table}")
             return False
-            
+        
+        # Log the actual schema being written
+        logger.info(f"DataFrame schema for {table}: {batch_df.schema}")
+        logger.info(f"DataFrame columns: {batch_df.columns}")
+        
+        # Show sample data for debugging
+        logger.info(f"Sample data for {table}:")
+        batch_df.show(5, truncate=False)
+        
         # Validate data quality
         if not validate_data_quality(batch_df, table):
             logger.warning(f"Data quality validation failed for batch {batch_id}, skipping write to {table}")
@@ -355,10 +462,7 @@ def write_batch_to_postgres(batch_df, table, batch_id):
         if table == POSTGRES_TABLE_RAW:
             batch_df = batch_df.withColumn("data", to_json(struct("*"))).select("data")
         
-        # Log schema for debugging
-        logger.info(f"Schema for table {table}: {batch_df.schema.simpleString()}")
-        
-        # Write to PostgreSQL
+        # Write to PostgreSQL with detailed error reporting
         (batch_df.write
              .format("jdbc")
              .option("url", POSTGRES_URL)
@@ -369,11 +473,22 @@ def write_batch_to_postgres(batch_df, table, batch_id):
              .mode("append")
              .save())
         
-        logger.info(f"Successfully wrote batch {batch_id} to {table}")
+        logger.info(f"Successfully wrote {batch_df.count()} records from batch {batch_id} to {table}")
         return True
+        
     except Exception as e:
         logger.error(f"Failed to write batch {batch_id} to {table}: {str(e)}")
+        logger.error(f"Exception type: {type(e).__name__}")
+        logger.error(f"Exception args: {e.args}")
         logger.error(traceback.format_exc())
+        
+        # Try to get more specific JDBC error information
+        if "java.sql" in str(e) or "JDBC" in str(e):
+            logger.error("This appears to be a JDBC/SQL error. Check:")
+            logger.error("1. Table schema matches DataFrame schema")
+            logger.error("2. PostgreSQL connection is working")
+            logger.error("3. Table exists and has correct permissions")
+            
         return False
 
 
@@ -530,7 +645,36 @@ def main():
                         .load())
                         
         # Parse JSON data
-        df_parsed = df_kafka_raw.select(from_json(col("value").cast("string"), raw_schema).alias("data")).select("data.*")
+        # df_parsed = df_kafka_raw.select(from_json(col("value").cast("string"), raw_schema).alias("data")).select("data.*")
+        outer_schema = define_outer_schema()
+
+        df_parsed = df_kafka_raw.select(
+            from_json(col("value").cast("string"), outer_schema).alias("parsed")
+        ).select("parsed.data.*")
+        df_parsed.writeStream \
+            .format("console") \
+            .option("truncate", False) \
+            .outputMode("append") \
+            .start()
+
+        df_flat = df_parsed.select(
+            "reading_id",
+            "device_id",
+            col("reading.valid").alias("valid"),
+            col("reading.uv_index").alias("uv_index"),
+            col("reading.rain_gauge").alias("rain_gauge"),
+            col("reading.wind_speed").alias("wind_speed"),
+            col("reading.air_humidity").alias("air_humidity"),
+            col("reading.peak_wind_gust").alias("peak_wind_gust"),
+            col("reading.air_temperature").alias("air_temperature"),
+            col("reading.light_intensity").alias("light_intensity"),
+            col("reading.rain_accumulation").alias("rain_accumulation"),
+            col("reading.barometric_pressure").alias("barometric_pressure"),
+            col("reading.wind_direction_sensor").alias("wind_direction_sensor"),
+            col("created_at").alias("processing_timestamp")
+        )
+
+
         
         # Use foreachBatch for micro-batch processing with proper checkpointing
         query = (df_parsed

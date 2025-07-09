@@ -22,15 +22,32 @@ CREATE TABLE IF NOT EXISTS weather_raw (
 -- );
 
 
+-- CREATE TABLE IF NOT EXISTS weather_clean (
+--     id SERIAL PRIMARY KEY,
+--     device_id VARCHAR(255) NOT NULL,
+--     date VARCHAR(10) NOT NULL,
+--     date_epoch INTEGER NOT NULL,
+--     day TEXT NOT NULL,
+--     is_anomaly BOOLEAN,
+--     anomaly_score DOUBLE PRECISION,
+--     processing_timestamp TIMESTAMP
+-- );
 CREATE TABLE IF NOT EXISTS weather_clean (
     id SERIAL PRIMARY KEY,
     device_id VARCHAR(255) NOT NULL,
     date VARCHAR(10) NOT NULL,
     date_epoch INTEGER NOT NULL,
-    day TEXT NOT NULL,
-    is_anomaly BOOLEAN,
+    maxtemp_c DOUBLE PRECISION,
+    mintemp_c DOUBLE PRECISION,
+    avgtemp_c DOUBLE PRECISION,
+    maxwind_kph DOUBLE PRECISION,
+    totalprecip_mm DOUBLE PRECISION,
+    avghumidity INTEGER,
+    daily_will_it_rain INTEGER,
+    daily_chance_of_rain INTEGER,
+    processing_timestamp TIMESTAMP,
     anomaly_score DOUBLE PRECISION,
-    processing_timestamp TIMESTAMP
+    is_anomaly BOOLEAN
 );
 
 
