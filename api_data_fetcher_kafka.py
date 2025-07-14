@@ -7,9 +7,7 @@ from dotenv import load_dotenv
 import os
 load_dotenv()
 
-# # Your actual credentials
-# EMAIL = "derrick.lubanga@strathmore.edu"
-# PASSWORD = "Expendables"
+
 EMAIL = os.getenv("EMAIL")
 PASSWORD = os.getenv("PASSWORD")
 
@@ -37,10 +35,10 @@ def login_and_get_token(email, password):
     if response.status_code == 201:
         tokens = response.json()
         access_token = tokens["data"]["accessToken"]
-        print("✅ Access token obtained successfully.")
+        print(" Access token obtained successfully.")
         return access_token
     else:
-        print(f"❌ Login failed. Status code: {response.status_code}")
+        print(f" Login failed. Status code: {response.status_code}")
         print(response.text)
         return None
 
@@ -52,7 +50,7 @@ def get_readings(access_token, producer):
     if response.status_code == 200:
         data = response.json()
         df = pd.DataFrame(data)
-        print("✅ Data retrieved successfully.")
+        print(" Data retrieved successfully.")
         print(df.head())  # Show first few rows
         
         # Send data to Kafka
@@ -64,10 +62,10 @@ def get_readings(access_token, producer):
             except Exception as e:
                 print(f"Failed to produce message: {e}")
         producer.flush() # Wait for all messages to be delivered
-        print(f"✅ Data sent to Kafka topic: {KAFKA_TOPIC}\n")
+        print(f"Data sent to Kafka topic: {KAFKA_TOPIC}\n")
 
     else:
-        print(f"❌ Failed to retrieve data. Status code: {response.status_code}")
+        print(f"Failed to retrieve data. Status code: {response.status_code}")
         print(response.text)
 
 def main_loop():
@@ -86,7 +84,7 @@ def main_loop():
             print("Skipping data retrieval due to login failure.")
         
         # Step 3: Wait for 3 hours (3*60*60 seconds)
-        print("⏳ Sleeping for 3 hours...\n")
+        print("Sleeping for 3 hours...\n")
         time.sleep(3 * 60 * 60)
 
 if __name__ == "__main__":
