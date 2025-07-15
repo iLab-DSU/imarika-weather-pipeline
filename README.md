@@ -14,7 +14,7 @@ Weather API → Kafka Producer → Kafka Topic → Spark Streaming → PostgreSQ
                               • Daily Aggregation
 ```
 
-##  Features
+## 📊 Features
 
 - **Real-time Data Ingestion**: Fetches weather data from external API every 3 hours
 - **Stream Processing**: Apache Spark Structured Streaming for real-time data processing
@@ -59,16 +59,61 @@ imarika/
 
 - Docker and Docker Compose
 - 8GB+ RAM recommended
-- Weather API credentials
+- Weather API account (see setup below)
 
-### 1. Environment Setup
+### 1. Create Weather API Account
 
-Create a `.env` file with your credentials:
+Before running the pipeline, you need to create an account with the weather API:
+
+#### Step 1: Sign Up
+Use Postman or any HTTP client to create an account:
 
 ```bash
-# Weather API Credentials
+POST https://api.wirelessplanet.co.ke/api/v1/auth/signup
+Content-Type: application/json
+
+{
+  "email": "your_email@example.com",
+  "password": "yourSecurePassword"
+}
+```
+
+**Response**: `201 Created` on success
+
+#### Step 2: Verify Email
+Check your email inbox and click the verification link sent to your email address.
+
+#### Step 3: Test Login (Optional)
+Verify your credentials work:
+
+```bash
+POST https://api.wirelessplanet.co.ke/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "your_email@example.com",
+  "password": "yourSecurePassword"
+}
+```
+
+**Response Example**:
+```json
+{
+  "access_token": "eyJhbGciOi...",
+  "refresh_token": "eyJhbGciOi..."
+}
+```
+
+> **Note**: The pipeline automatically handles token refresh by logging in every 3 hours, so you don't need to manage tokens manually.
+
+### 2. Environment Setup
+
+Create a `.env` file with your **verified** credentials:
+
+```bash
+# Weather API Credentials (use the same credentials from Step 1)
 EMAIL=your_email@example.com
-PASSWORD=your_password
+PASSWORD=yourSecurePassword
 
 # Database Configuration
 POSTGRES_USER=postgres
@@ -76,26 +121,30 @@ POSTGRES_PASSWORD=postgres
 POSTGRES_DB=imarika
 ```
 
-### 2. Start the Pipeline
+### 2. Run the Project
+
+That's it! Just run:
 
 ```bash
-# Make the startup script executable
-chmod +x start-pipeline.sh
-
-# Start all services
-./start-pipeline.sh
+sh start-pipeline.sh
 ```
 
-This will start:
-- Zookeeper (port 2181)
-- Kafka Broker (ports 9092, 19092)
-- Schema Registry (port 8081)
-- Kafdrop UI (port 9000)
-- Spark Master (port 8080)
-- Spark Worker
-- PostgreSQL (port 5433)
-- API Data Producer
-- Spark Streaming Processor
+**Note**: The script automatically handles:
+- Making itself executable
+- Stopping any existing containers
+- Building and starting all services
+- Setting up the complete pipeline
+
+### 3. Verify Setup
+-  Zookeeper (port 2181)
+-  Kafka Broker (ports 9092, 19092)
+-  Schema Registry (port 8081)
+-  Kafdrop UI (port 9000)
+-  Spark Master (port 8080)
+-  Spark Worker
+-  PostgreSQL (port 5433)
+-  API Data Producer
+-  Spark Streaming Processor
 
 ### 3. Monitor the Pipeline
 
@@ -103,9 +152,9 @@ This will start:
 - **Kafdrop**: http://localhost:9000 - Monitor Kafka topics and messages
 - **PostgreSQL**: localhost:5433 - Access database directly
 
-## 🔧 Configuration
+<!-- ## 🔧 Configuration
 
-### Environment Variables
+### Environment Variables(This can be put to the .env file)
 
 | Variable | Description | Default |
 |----------|-------------|---------|
@@ -113,7 +162,7 @@ This will start:
 | `KAFKA_TOPIC_RAW` | Raw data topic | `weather-readings-raw` |
 | `POSTGRES_URL` | PostgreSQL JDBC URL | `jdbc:postgresql://imarika-postgres:5432/imarika` |
 | `MAX_OFFSETS_PER_TRIGGER` | Spark batch size | `1000` |
-| `CHECKPOINT_LOCATION` | Spark checkpoint location | `/tmp/imarika/checkpoints` |
+| `CHECKPOINT_LOCATION` | Spark checkpoint location | `/tmp/imarika/checkpoints` | -->
 
 ### Kafka Configuration
 
@@ -124,9 +173,12 @@ This will start:
 ## Data Pipeline
 
 ### 1. Data Ingestion (`api_data_fetcher_kafka.py`)
-- Authenticates with weather API
-- Fetches readings every 3 hours
-- Publishes to Kafka topic
+- Authenticates with weather API using email/password
+- Automatically refreshes access tokens every 3 hours
+- Fetches readings and publishes to Kafka topic
+- **API Endpoints Used**:
+  - Login: `POST https://api.wirelessplanet.co.ke/api/v1/auth/login`
+  - Readings: `GET https://api.wirelessplanet.co.ke/api/v1/readings`
 
 ### 2. Stream Processing (`weather_spark_processor.py`)
 
@@ -254,15 +306,23 @@ LIMIT 10;
 
 The pipeline includes comprehensive data validation:
 
-- **Schema Validation**: Ensures data matches expected structure
-- **Range Validation**: Temperature (-50°C to 60°C), Humidity (0-100%), etc.
-- **Null Handling**: Imputation for missing values
-- **Anomaly Detection**: Statistical outlier detection
-- **Integrity Checks**: Foreign key and constraint validation
+-  **Schema Validation**: Ensures data matches expected structure
+-  **Range Validation**: Temperature (-50°C to 60°C), Humidity (0-100%), etc.
+-  **Null Handling**: Imputation for missing values
+-  **Anomaly Detection**: Statistical outlier detection
+-  **Integrity Checks**: Foreign key and constraint validation
 
 ## 🔧 Development
 
 ### Local Development Setup
+
+**Quick Start (Recommended)**
+```bash
+# Run the complete pipeline locally
+sh start-pipeline.sh
+```
+
+**For Component Development**
 
 1. **Install Dependencies**
    ```bash
@@ -271,10 +331,10 @@ The pipeline includes comprehensive data validation:
 
 2. **Run Individual Components**
    ```bash
-   # Start Kafka and PostgreSQL only
-   docker-compose up zookeeper kafka-broker-1 postgres
+   # Start infrastructure only (Kafka, PostgreSQL, Spark)
+   docker-compose up zookeeper kafka-broker-1 postgres spark-master spark-worker
    
-   # Run producer locally
+   # Run producer locally for testing
    python api_data_fetcher_kafka.py
    
    # Run Spark job locally
@@ -305,7 +365,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## 📧 Contact
 
-For questions or support, please contact lubanga.derrickn@gmail.com.
+For questions or support, please contact the development team.
 
 ---
 
