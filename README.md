@@ -106,7 +106,20 @@ Content-Type: application/json
 
 > **Note**: The pipeline automatically handles token refresh by logging in every 3 hours, so you don't need to manage tokens manually.
 
-### 2. Environment Setup
+### 2. Clone and navigate to project
+git clone https://github.com/iLab-DSU/imarika-weather-pipeline.git
+cd imarika-weather-pipeline
+
+# Set up Python environment
+python -m venv venv
+venv\Scripts\activate  # Windows
+# or
+source venv/bin/activate  # macOS/Linux
+
+# Install dependencies
+pip install -r requirements.txt
+
+### 3. Environment Setup
 
 Create a `.env` file with your **verified** credentials:
 
@@ -121,7 +134,8 @@ POSTGRES_PASSWORD=postgres
 POSTGRES_DB=imarika
 ```
 
-### 2. Run the Project
+
+### 4. Run the Project
 
 That's it! Just run:
 
@@ -135,7 +149,7 @@ sh start-pipeline.sh
 - Building and starting all services
 - Setting up the complete pipeline
 
-### 3. Verify Setup
+### 5. Verify Setup
 -  Zookeeper (port 2181)
 -  Kafka Broker (ports 9092, 19092)
 -  Schema Registry (port 8081)
@@ -146,7 +160,7 @@ sh start-pipeline.sh
 -  API Data Producer
 -  Spark Streaming Processor
 
-### 3. Monitor the Pipeline
+### 6. Monitor the Pipeline
 
 - **Spark UI**: http://localhost:8080 - Monitor Spark jobs
 - **Kafdrop**: http://localhost:9000 - Monitor Kafka topics and messages
