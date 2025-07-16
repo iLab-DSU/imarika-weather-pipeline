@@ -107,18 +107,21 @@ Content-Type: application/json
 > **Note**: The pipeline automatically handles token refresh by logging in every 3 hours, so you don't need to manage tokens manually.
 
 ### 2. Clone and navigate to project
+```bash
 git clone https://github.com/iLab-DSU/imarika-weather-pipeline.git
 cd imarika-weather-pipeline
-
+```
 # Set up Python environment
+```bash
 python -m venv venv
 venv\Scripts\activate  # Windows
+source venv/Scripts/activate # Git 
 # or
 source venv/bin/activate  # macOS/Linux
 
 # Install dependencies
 pip install -r requirements.txt
-
+```
 ### 3. Environment Setup
 
 Create a `.env` file with your **verified** credentials:
