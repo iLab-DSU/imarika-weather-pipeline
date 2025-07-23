@@ -12,6 +12,46 @@ Weather API → Kafka Producer → Kafka Topic → Spark Streaming → PostgreSQ
                               • ML Imputation
                               • Anomaly Detection
                               • Daily Aggregation
+
+         +-------------------+
+         |   Weather API     |
+         +--------+----------+
+                  |
+                  v
+         +--------+----------+
+         |   Kafka Producer  |
+         | (api_data_fetcher)|   [Pushes data to Kafka Topic]
+         +--------+----------+
+                  |
+                  v
+         +-------------------+
+         |   Kafka Topic     |
+         | (weather-readings)|
+         +--------+----------+
+                  |
+                  v
+         +-----------------------------+
+         |       Spark Streaming       |
+         |   - Data Cleaning           |
+         |   - ML Imputation           |
+         |   - Anomaly Detection       |
+         |   - Aggregation             |
+         +--------+----------+--------+
+                  |                   |
+         +--------v--+        +-------v--------+
+         | Raw Table |        | Processed Table|
+         | PostgreSQL|        | PostgreSQL     |
+         +--------+--+        +-------+--------+
+                  |                   |
+                  |         +---------v----------+
+                  +-------->+ Visualization (BI) |
+                            |   - Power BI       |
+                            +--------------------+
+
+                            +---------------------+
+                            | Forecasting Layer   |
+                            |   - Neural GCM      |
+                            +---------------------+
 ```
 
 ## 📊 Features
@@ -387,3 +427,4 @@ For questions or support, please contact the development team.
 ---
 
 **Built with ❤️ for real-time weather data processing**
+
