@@ -2,7 +2,7 @@ name: Build and Deploy to Server
 on:
   push:
     branches:
-      - Deployment
+      - Production
 
 permissions:
   contents: read
@@ -15,12 +15,12 @@ jobs:
       - name: SSH into Server & Deploy
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: "144.91.85.41"
-          username: "job"
-          password: "f330ed623ae7"
+          host: ${{secrets.SERVER_HOST }}
+          username:  ${{secrets.SERVER_USERNAME }}
+          password: ${{secrets.SERVER_PASSWORD }}
           script: |
-            cd anga-Africa-main &&
-            git pull origin Deployment &&
+            cd ${{secret.project_path}} &&
+            git pull origin Production &&
             chmod +x start-pipeline.sh &&  
             ./start-pipeline.sh deployment &&
             echo "Deployment completed successfully."
