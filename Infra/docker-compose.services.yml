@@ -67,11 +67,6 @@ services:
     container_name: imarika-kafdrop
     ports:
       - 8000:9000
-    depends_on:
-      kafka-broker-1:
-        condition: service_healthy
-      schema-registry:
-        condition: service_healthy
     environment:
       KAFKA_BROKERCONNECT: kafka-broker-1:19092
       SCHEMAREGISTRY_CONNECT: http://schema-registry:8081
