@@ -67,7 +67,7 @@ services:
     image: obsidiandynamics/kafdrop
     container_name: imarika-kafdrop
     ports:
-    - 9000:9000
+    - 8000:9000
     depends_on:
       kafka-broker-1:
         condition: service_healthy
