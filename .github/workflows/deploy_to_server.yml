@@ -19,7 +19,7 @@ jobs:
           username:  ${{secrets.SERVER_USERNAME }}
           password: ${{secrets.SERVER_PASSWORD }}
           script: |
-            cd ${{secrets.PROJECT_PATH}}
+            cd /imarika_data_pipeline/imarika-weather-pipeline
             echo "Working directory: ${{secrets.PROJECT_PATH}} 
             git pull origin Production 
             chmod +x start-pipeline.sh  
