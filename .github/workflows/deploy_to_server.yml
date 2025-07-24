@@ -1,0 +1,26 @@
+name: Build and Deploy to Server
+on:
+  push:
+    branches:
+      - Deployment
+
+permissions:
+  contents: read
+  packages: write 
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH into Server & Deploy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: "144.91.85.41"
+          username: "job"
+          password: "f330ed623ae7"
+          script: |
+            cd anga-Africa-main &&
+            git pull origin Deployment &&
+            chmod +x start-pipeline.sh &&  
+            ./start-pipeline.sh deployment &&
+            echo "Deployment completed successfully."
